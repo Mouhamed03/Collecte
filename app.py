@@ -23,15 +23,58 @@ JSON_PATH = os.path.join(BASE_DIR, "data_collection.json")
 if not os.path.exists(JSON_PATH):
     JSON_PATH = os.path.join(BASE_DIR, "data", "data_collection.json")
 
+CLEAN_BOOKS_PATHS = [
+    "/Users/m3/Documents/MASTER IA DIT 2/DATA COLLECTION/bookscrape_data.csv",
+    os.path.join(BASE_DIR, "bookscrape_data.csv"),
+    os.path.join(BASE_DIR, "data", "bookscrape_data.csv"),
+    os.path.join(BASE_DIR, "..", "bookscrape_data.csv"),
+    os.path.join(BASE_DIR, "..", "data", "bookscrape_data.csv"),
+    "/content/drive/MyDrive/Data_collecte/bookscrape_data.csv",
+]
+CLEAN_CARS_PATHS = [
+    "/Users/m3/Documents/MASTER IA DIT 2/DATA COLLECTION/gaaras_nettoyer.csv",
+    os.path.join(BASE_DIR, "gaaras_nettoyer.csv"),
+    os.path.join(BASE_DIR, "data", "gaaras_nettoyer.csv"),
+    os.path.join(BASE_DIR, "..", "gaaras_nettoyer.csv"),
+    os.path.join(BASE_DIR, "..", "data", "gaaras_nettoyer.csv"),
+    "/content/drive/MyDrive/Data_collecte/gaaras_nettoyer.csv",
+]
+
 
 def load_json_data():
     if not os.path.exists(JSON_PATH):
-        return {"books": [], "cars": [], "generic_scraping": []}
-    with open(JSON_PATH, encoding="utf-8") as f:
-        return json.load(f)
+        data = generate_json_from_csv()
+        save_json_data(data)
+        return data
+
+    try:
+        with open(JSON_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = generate_json_from_csv()
+        save_json_data(data)
+        return data
+
+    if not isinstance(data, dict):
+        data = generate_json_from_csv()
+        save_json_data(data)
+        return data
+
+    data.setdefault("books", [])
+    data.setdefault("cars", [])
+    data.setdefault("generic_scraping", [])
+
+    if (not data["books"] and any(os.path.exists(path) for path in CLEAN_BOOKS_PATHS)) or (
+        not data["cars"] and any(os.path.exists(path) for path in CLEAN_CARS_PATHS)
+    ):
+        data = generate_json_from_csv()
+        save_json_data(data)
+
+    return data
 
 
 def save_json_data(data):
+    os.makedirs(os.path.dirname(JSON_PATH), exist_ok=True)
     with open(JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -48,6 +91,30 @@ def append_json_table(table_name, records):
 def get_dataframe(table_name):
     data = load_json_data()
     return pd.DataFrame(data.get(table_name, []))
+
+
+def generate_json_from_csv():
+    data = {"books": [], "cars": [], "generic_scraping": []}
+
+    for path in CLEAN_BOOKS_PATHS:
+        if os.path.exists(path):
+            try:
+                df = pd.read_csv(path)
+                data["books"] = df.where(pd.notnull(df), None).to_dict(orient="records")
+                break
+            except Exception:
+                continue
+
+    for path in CLEAN_CARS_PATHS:
+        if os.path.exists(path):
+            try:
+                df = pd.read_csv(path)
+                data["cars"] = df.where(pd.notnull(df), None).to_dict(orient="records")
+                break
+            except Exception:
+                continue
+
+    return data
 
 
 # Menu
@@ -433,16 +500,14 @@ elif menu == "Scraping data":
                         st.success(f"✅ {len(df_scraped)} éléments récupérés avec Selenium")
                         st.dataframe(df_scraped, use_container_width=True)
 
+                        records = df_scraped.where(pd.notnull(df_scraped), None).to_dict(orient="records")
                         if "books.toscrape.com" in url:
-                            records = df_scraped.where(pd.notnull(df_scraped), None).to_dict(orient="records")
                             append_json_table("books", records)
                             st.info("Les données de livres ont été enregistrées dans data_collection.json")
                         elif "gaaraas.com" in url:
-                            records = df_scraped.where(pd.notnull(df_scraped), None).to_dict(orient="records")
                             append_json_table("cars", records)
                             st.info("Les données de voitures ont été enregistrées dans data_collection.json")
                         else:
-                            records = df_scraped.where(pd.notnull(df_scraped), None).to_dict(orient="records")
                             append_json_table("generic_scraping", records)
                             st.info("Les données génériques ont été enregistrées dans data_collection.json")
 
