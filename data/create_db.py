@@ -42,3 +42,4 @@ conn.close()
 print(f"✅ Base de données créée avec succès : {db_path}")
 print(f"   - Table 'books' : {len(df_books)} enregistrements")
 print(f"   - Table 'cars'  : {len(df_cars)} enregistrements")
+
