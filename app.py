@@ -110,52 +110,93 @@ elif menu == "Dashboard":
 
             # === SECTION VOITURES ===
             else:
-                tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
-                if "cars" not in tables["name"].values:
-                    st.error("La table 'cars' n'existe pas dans la base de données.")
-                else:
-                    df = pd.read_sql("SELECT * FROM cars", conn)
-                    st.subheader(f"🚗 {len(df)} voitures récupérées")
+            tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+            if "cars" not in tables["name"].values:
+                st.error("La table 'cars' n'existe pas dans la base de données.")
+            else:
+                df = pd.read_sql("SELECT * FROM cars", conn)
 
-                    marque_col = "V1_Marque" if "V1_Marque" in df.columns else None
-                    region_col = "V7_Region" if "V7_Region" in df.columns else None
+                st.subheader(f"🚗 {len(df)} voitures récupérées")
 
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Nombre total de voitures", len(df))
-                    with col2:
-                        st.metric("Nombre de marques", df[marque_col].nunique() if marque_col else "N/A")
-                    with col3:
-                        st.metric("Nombre de régions", df[region_col].nunique() if region_col else "N/A")
+                # Détection des colonnes
+                marque_col = next((c for c in ["marque", "V1_Marque", "Marque"] if c in df.columns), None)
+                prix_col = next((c for c in ["prix", "V4_Prix", "Prix"] if c in df.columns), None)
+                annee_col = next((c for c in ["annee", "V3_Annee", "Année"] if c in df.columns), None)
+                boite_col = next((c for c in ["boite", "V6_Boite", "Boite"] if c in df.columns), None)
+                region_col = next((c for c in ["region", "V7_Region", "Région"] if c in df.columns), None)
 
-                    st.markdown("---")
+                # --- KPIs ---
+                col1, col2, col3 = st.columns(3)
 
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        if marque_col:
-                            top = df[marque_col].value_counts().head(10).reset_index()
-                            top.columns = ["Marque", "Nombre"]
-                            fig = px.bar(top, x="Marque", y="Nombre", title="Top 10 des marques")
-                            st.plotly_chart(fig, use_container_width=True)
-                    with col_b:
-                        boite_col = "V6_Boite" if "V6_Boite" in df.columns else None
-                        if boite_col:
-                            fig = px.pie(df, names=boite_col, title="Répartition des boîtes de vitesses")
-                            st.plotly_chart(fig, use_container_width=True)
+                with col1:
+                    st.metric("Nombre total de voitures", len(df))
 
+                with col2:
+                    if marque_col:
+                        st.metric("Nombre de marques", df[marque_col].nunique())
+                    else:
+                        st.metric("Nombre de marques", "N/A")
+
+                with col3:
                     if region_col:
-                        top_regions = df[region_col].value_counts().head(10).reset_index()
-                        top_regions.columns = ["Région", "Nombre"]
-                        fig = px.bar(top_regions, x="Région", y="Nombre", title="Top 10 des régions")
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.metric("Nombre de régions", df[region_col].nunique())
+                    else:
+                        st.metric("Nombre de régions", "N/A")
 
-                    with st.expander("Voir les données"):
-                        st.dataframe(df, use_container_width=True)
+                st.markdown("---")
 
-            conn.close()
+                # --- Graphiques ---
+                col_a, col_b = st.columns(2)
 
-        except Exception as e:
-            st.error(f"Erreur lors de la lecture de la base : {e}")
+                with col_a:
+                    if marque_col:
+                        top_marques = df[marque_col].value_counts().head(10).reset_index()
+                        top_marques.columns = ["Marque", "Nombre"]
+                        fig1 = px.bar(
+                            top_marques,
+                            x="Marque",
+                            y="Nombre",
+                            title="Top 10 des marques"
+                        )
+                        st.plotly_chart(fig1, use_container_width=True)
+                    else:
+                        st.info("Colonne marque non trouvée")
+
+                with col_b:
+                    if boite_col:
+                        fig2 = px.pie(
+                            df,
+                            names=boite_col,
+                            title="Répartition des boîtes de vitesses"
+                        )
+                        st.plotly_chart(fig2, use_container_width=True)
+                    else:
+                        st.info("Colonne boîte non trouvée")
+
+                # Graphique régions
+                if region_col:
+                    top_regions = df[region_col].value_counts().head(10).reset_index()
+                    top_regions.columns = ["Région", "Nombre"]
+                    fig3 = px.bar(
+                        top_regions,
+                        x="Région",
+                        y="Nombre",
+                        title="Top 10 des régions"
+                    )
+                    st.plotly_chart(fig3, use_container_width=True)
+
+                with st.expander("Voir les données"):
+                    st.dataframe(df, use_container_width=True)
+
+        # Fermeture de la connexion
+        conn.close()
+
+    except FileNotFoundError:
+        st.error(f"Fichier de base de données introuvable : {DB_PATH}")
+        st.info("Vérifie que le fichier data_collection.db existe bien à cet emplacement.")
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des données : {e}")
+
 
 # === PAGE TÉLÉCHARGEMENT ===
 elif menu == "Téléchargement données brutes":
