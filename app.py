@@ -1,14 +1,226 @@
-import streamlit as st
-import pandas as pd
-import sqlite3
-import plotly.express as px
 import os
+import sqlite3
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+
+def resolve_column(df, candidates):
+    for candidate in candidates:
+        if candidate in df.columns:
+            return candidate
+    return None
+
+
+def apply_plotly_theme(fig):
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=50, b=20),
+        font=dict(family="Arial", size=13, color="#111827"),
+        title=dict(font=dict(size=18, family="Arial Black", color="#111827")),
+    )
+    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1.5)
+    return fig
+
+
+def build_books_dashboard(conn):
+    tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+    if "books" not in tables["name"].values:
+        st.error("La table 'books' n'existe pas dans la base de données.")
+        return
+
+    df = pd.read_sql("SELECT * FROM books", conn)
+    st.subheader(f"📚 {len(df)} livres récupérés")
+
+    st.markdown(
+        """
+        <div style="background: linear-gradient(90deg, #eef2ff 0%, #f8fafc 100%); padding: 1rem 1.2rem; border-radius: 14px; border: 1px solid #e5e7eb; margin-bottom: 1rem;">
+            <strong>Analyse des livres</strong><br>
+            Visualisation rapide des prix, des notes et de la disponibilité.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    price_col = resolve_column(df, ["V2_Prix", "prix", "price"])
+    if price_col:
+        df["prix_clean"] = pd.to_numeric(df[price_col], errors="coerce")
+        prix_clean = df["prix_clean"]
+    else:
+        prix_clean = pd.Series([pd.NA] * len(df), dtype="float64")
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Nombre total de livres", len(df))
+    with col2:
+        st.metric("Prix moyen", f"{prix_clean.mean():.2f} £" if price_col else "N/A")
+    with col3:
+        st.metric("Prix minimum", f"{prix_clean.min():.2f} £" if price_col else "N/A")
+    with col4:
+        st.metric("Prix maximum", f"{prix_clean.max():.2f} £" if price_col else "N/A")
+
+    st.markdown("---")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if price_col:
+            fig = px.histogram(
+                df,
+                x="prix_clean",
+                nbins=25,
+                title="Distribution des prix",
+                color_discrete_sequence=["#6366f1"],
+            )
+            fig = apply_plotly_theme(fig)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col_b:
+        rating_col = resolve_column(df, ["V5_Note", "note", "rating"])
+        if rating_col:
+            rating_counts = df[rating_col].value_counts().sort_index().reset_index()
+            rating_counts.columns = ["Note", "Nombre"]
+            fig = px.bar(
+                rating_counts,
+                x="Note",
+                y="Nombre",
+                text="Nombre",
+                title="Répartition des notes",
+                color_discrete_sequence=["#10b981"],
+            )
+            fig = apply_plotly_theme(fig)
+            fig.update_traces(textposition="outside")
+            st.plotly_chart(fig, use_container_width=True)
+
+    availability_col = resolve_column(df, ["V3_Disponibilite", "disponibilite", "availability"])
+    if availability_col:
+        fig = px.pie(
+            df,
+            names=availability_col,
+            title="Disponibilité des livres",
+            hole=0.45,
+            color_discrete_sequence=px.colors.qualitative.Set3,
+        )
+        fig = apply_plotly_theme(fig)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Voir les données"):
+        st.dataframe(df, use_container_width=True)
+
+
+def build_cars_dashboard(conn):
+    tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+    if "cars" not in tables["name"].values:
+        st.error("La table 'cars' n'existe pas dans la base de données.")
+        return
+
+    df = pd.read_sql("SELECT * FROM cars", conn)
+    st.subheader(f"🚗 {len(df)} voitures récupérées")
+
+    st.markdown(
+        """
+        <div style="background: linear-gradient(90deg, #ecfeff 0%, #f8fafc 100%); padding: 1rem 1.2rem; border-radius: 14px; border: 1px solid #e5e7eb; margin-bottom: 1rem;">
+            <strong>Analyse des voitures</strong><br>
+            Mise en avant des marques, des boîtes de vitesses et des régions.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    marque_col = resolve_column(df, ["marque", "V1_Marque", "Marque", "schema_brand"])
+    region_col = resolve_column(df, ["region", "V7_Region", "Région", "location"])
+    boite_col = resolve_column(df, ["boite", "V6_Boite", "Boite", "numberOfDoors"])
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Nombre total de voitures", len(df))
+    with col2:
+        st.metric("Nombre de marques", df[marque_col].nunique() if marque_col else "N/A")
+    with col3:
+        st.metric("Nombre de régions", df[region_col].nunique() if region_col else "N/A")
+
+    st.markdown("---")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if marque_col:
+            top_marques = df[marque_col].value_counts().head(10).reset_index()
+            top_marques.columns = ["Marque", "Nombre"]
+            fig = px.bar(
+                top_marques,
+                x="Marque",
+                y="Nombre",
+                text="Nombre",
+                title="Top 10 des marques",
+                color_discrete_sequence=["#0f766e"],
+            )
+            fig = apply_plotly_theme(fig)
+            fig.update_traces(textposition="outside")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Colonne marque non trouvée")
+
+    with col_b:
+        if boite_col:
+            fig = px.pie(
+                df,
+                names=boite_col,
+                title="Répartition des boîtes de vitesses",
+                hole=0.45,
+                color_discrete_sequence=px.colors.qualitative.Safe,
+            )
+            fig = apply_plotly_theme(fig)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Colonne boîte non trouvée")
+
+    if region_col:
+        top_regions = df[region_col].value_counts().head(10).reset_index()
+        top_regions.columns = ["Région", "Nombre"]
+        fig = px.bar(
+            top_regions,
+            x="Région",
+            y="Nombre",
+            text="Nombre",
+            title="Top 10 des régions",
+            color_discrete_sequence=["#f59e0b"],
+        )
+        fig = apply_plotly_theme(fig)
+        fig.update_traces(textposition="outside")
+        st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Voir les données"):
+        st.dataframe(df, use_container_width=True)
+
 
 # === Configuration de la page ===
-st.set_page_config(
-    page_title="Data App",
-    page_icon="📊",
-    layout="wide"
+st.set_page_config(page_title="Data App", page_icon="📊", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+    }
+    [data-testid="stSidebar"] {
+        background: #0f172a;
+    }
+    div[data-testid="stMetric"] {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 0.7rem;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+    .stPlotlyChart {
+        border-radius: 14px;
+        overflow: hidden;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 st.title("DATA APPS")
@@ -17,7 +229,7 @@ st.markdown("---")
 # === Chemins relatifs ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-DB_PATH = os.path.join(DATA_DIR, "data_collection.db")  # La base dans le dossier data/
+DB_PATH = os.path.join(DATA_DIR, "data_collection.db")
 
 # === Menu latéral ===
 menu = st.sidebar.selectbox(
@@ -26,177 +238,49 @@ menu = st.sidebar.selectbox(
         "Accueil",
         "Dashboard",
         "Téléchargement données brutes",
-        "Formulaires d'évaluation"
-    ]
+        "Formulaires d'évaluation",
+    ],
 )
 
 # === PAGE ACCUEIL ===
 if menu == "Accueil":
     st.header("Bienvenue dans votre application d'analyse de données")
-    st.write("""
+    st.write(
+        """
     Cette application permet de :
     - Visualiser des données nettoyées (Books to Scrape + Gaaraas)
     - Télécharger les données dans leurs états bruts (No-code)
     - Accéder aux formulaires d'évaluation
-    """)
+    """
+    )
 
 # === PAGE DASHBOARD ===
 elif menu == "Dashboard":
     st.header("📈 Dashboard des données nettoyées")
 
-    # Vérifier que la base existe
     if not os.path.exists(DB_PATH):
-        st.error(f"Base de données introuvable à {DB_PATH}. Vérifie que le fichier data_collection.db est dans le dossier data/.")
+        st.error(
+            f"Base de données introuvable à {DB_PATH}. Vérifie que le fichier data_collection.db est dans le dossier data/."
+        )
     else:
         try:
-            # Connexion à la base SQLite
             conn = sqlite3.connect(DB_PATH)
 
             choix = st.radio(
                 "Choisir la source de données :",
                 ["Livres (Books to Scrape)", "Voitures (Gaaraas)"],
-                horizontal=True
+                horizontal=True,
             )
 
-            # === SECTION LIVRES ===
             if choix == "Livres (Books to Scrape)":
-                # Vérifier que la table books existe
-                tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
-                if "books" not in tables["name"].values:
-                    st.error("La table 'books' n'existe pas dans la base de données.")
-                else:
-                    df = pd.read_sql("SELECT * FROM books", conn)
-                    st.subheader(f"📚 {len(df)} livres récupérés")
-
-                    # Colonne prix
-                    price_col = "V2_Prix" if "V2_Prix" in df.columns else None
-                    if price_col:
-                        df["prix_clean"] = pd.to_numeric(df[price_col], errors="coerce")
-                        prix_clean = df["prix_clean"]
-
-                    # KPIs
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Nombre total de livres", len(df))
-                    with col2:
-                        st.metric("Prix moyen", f"{prix_clean.mean():.2f} £" if price_col else "N/A")
-                    with col3:
-                        st.metric("Prix minimum", f"{prix_clean.min():.2f} £" if price_col else "N/A")
-                    with col4:
-                        st.metric("Prix maximum", f"{prix_clean.max():.2f} £" if price_col else "N/A")
-
-                    st.markdown("---")
-
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        if price_col:
-                            fig = px.histogram(df, x="prix_clean", nbins=30, title="Distribution des prix")
-                            st.plotly_chart(fig, use_container_width=True)
-                    with col_b:
-                        rating_col = "V5_Note" if "V5_Note" in df.columns else None
-                        if rating_col:
-                            rating_counts = df[rating_col].value_counts().reset_index()
-                            rating_counts.columns = ["Note", "Nombre"]
-                            fig = px.bar(rating_counts, x="Note", y="Nombre", title="Répartition des notes")
-                            st.plotly_chart(fig, use_container_width=True)
-
-                    avail_col = "V3_Disponibilite" if "V3_Disponibilite" in df.columns else None
-                    if avail_col:
-                        fig = px.pie(df, names=avail_col, title="Disponibilité des livres")
-                        st.plotly_chart(fig, use_container_width=True)
-
-                    with st.expander("Voir les données"):
-                        st.dataframe(df, use_container_width=True)
-
-            # === SECTION VOITURES ===
+                build_books_dashboard(conn)
             else:
-            tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
-            if "cars" not in tables["name"].values:
-                st.error("La table 'cars' n'existe pas dans la base de données.")
-            else:
-                df = pd.read_sql("SELECT * FROM cars", conn)
+                build_cars_dashboard(conn)
 
-                st.subheader(f"🚗 {len(df)} voitures récupérées")
+            conn.close()
 
-                # Détection des colonnes
-                marque_col = next((c for c in ["marque", "V1_Marque", "Marque"] if c in df.columns), None)
-                prix_col = next((c for c in ["prix", "V4_Prix", "Prix"] if c in df.columns), None)
-                annee_col = next((c for c in ["annee", "V3_Annee", "Année"] if c in df.columns), None)
-                boite_col = next((c for c in ["boite", "V6_Boite", "Boite"] if c in df.columns), None)
-                region_col = next((c for c in ["region", "V7_Region", "Région"] if c in df.columns), None)
-
-                # --- KPIs ---
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    st.metric("Nombre total de voitures", len(df))
-
-                with col2:
-                    if marque_col:
-                        st.metric("Nombre de marques", df[marque_col].nunique())
-                    else:
-                        st.metric("Nombre de marques", "N/A")
-
-                with col3:
-                    if region_col:
-                        st.metric("Nombre de régions", df[region_col].nunique())
-                    else:
-                        st.metric("Nombre de régions", "N/A")
-
-                st.markdown("---")
-
-                # --- Graphiques ---
-                col_a, col_b = st.columns(2)
-
-                with col_a:
-                    if marque_col:
-                        top_marques = df[marque_col].value_counts().head(10).reset_index()
-                        top_marques.columns = ["Marque", "Nombre"]
-                        fig1 = px.bar(
-                            top_marques,
-                            x="Marque",
-                            y="Nombre",
-                            title="Top 10 des marques"
-                        )
-                        st.plotly_chart(fig1, use_container_width=True)
-                    else:
-                        st.info("Colonne marque non trouvée")
-
-                with col_b:
-                    if boite_col:
-                        fig2 = px.pie(
-                            df,
-                            names=boite_col,
-                            title="Répartition des boîtes de vitesses"
-                        )
-                        st.plotly_chart(fig2, use_container_width=True)
-                    else:
-                        st.info("Colonne boîte non trouvée")
-
-                # Graphique régions
-                if region_col:
-                    top_regions = df[region_col].value_counts().head(10).reset_index()
-                    top_regions.columns = ["Région", "Nombre"]
-                    fig3 = px.bar(
-                        top_regions,
-                        x="Région",
-                        y="Nombre",
-                        title="Top 10 des régions"
-                    )
-                    st.plotly_chart(fig3, use_container_width=True)
-
-                with st.expander("Voir les données"):
-                    st.dataframe(df, use_container_width=True)
-
-        # Fermeture de la connexion
-        conn.close()
-
-    except FileNotFoundError:
-        st.error(f"Fichier de base de données introuvable : {DB_PATH}")
-        st.info("Vérifie que le fichier data_collection.db existe bien à cet emplacement.")
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des données : {e}")
-
+        except Exception as e:
+            st.error(f"Erreur lors de la lecture de la base : {e}")
 
 # === PAGE TÉLÉCHARGEMENT ===
 elif menu == "Téléchargement données brutes":
@@ -210,7 +294,7 @@ elif menu == "Téléchargement données brutes":
                 label="Télécharger Books bruts",
                 data=f,
                 file_name="books_brut.csv",
-                mime="text/csv"
+                mime="text/csv",
             )
     else:
         st.warning("Fichier books_brut.csv non trouvé dans data/.")
@@ -222,7 +306,7 @@ elif menu == "Téléchargement données brutes":
                 label="Télécharger Gaaraas bruts",
                 data=f,
                 file_name="gaaraas_brut.csv",
-                mime="text/csv"
+                mime="text/csv",
             )
     else:
         st.warning("Fichier gaaraas_brut.csv non trouvé dans data/.")
@@ -237,11 +321,11 @@ elif menu == "Formulaires d'évaluation":
         st.subheader("Formulaire Kobo")
         st.link_button(
             "Remplir le formulaire Kobo",
-            "https://ee.kobotoolbox.org/x/wjF8NPvg"
+            "https://ee.kobotoolbox.org/x/wjF8NPvg",
         )
     with col2:
         st.subheader("Formulaire Google Forms")
         st.link_button(
             "Remplir le formulaire Google Forms",
-            "https://docs.google.com/forms/d/e/1FAIpQLScK9rU2LxRYeGuR7Z6yW0aYgPIH7P3una4jg8G3pY3a8fccvw/viewform"
+            "https://docs.google.com/forms/d/e/1FAIpQLScK9rU2LxRYeGuR7Z6yW0aYgPIH7P3una4jg8G3pY3a8fccvw/viewform",
         )
