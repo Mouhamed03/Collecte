@@ -204,30 +204,40 @@ st.markdown(
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-    @import url('https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css');
-
     body {
         font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+        background: #f1f5f9;
+        color: #0f172a;
     }
     [data-testid="stAppViewContainer"] {
         background: transparent;
-        padding: 1.5rem 1.5rem 2rem;
+        padding: 1.2rem 1.2rem 2rem;
     }
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #111827 0%, #0f172a 100%) !important;
-        color: #f8fafc;
-        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        background: #0d1f36 !important;
+        color: #e2e8f0;
+        border-right: 1px solid rgba(226, 232, 240, 0.08);
     }
     [data-testid="stSidebar"] .block-container {
-        padding: 1rem 1rem 1.5rem !important;
+        padding: 1.1rem 1rem 1.5rem !important;
+    }
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] label {
+        color: #e2e8f0 !important;
+    }
+    .sidebar-menu {
+        margin-bottom: 1rem;
+        padding: 0.8rem 0.8rem 0.9rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 18px;
     }
     div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, #ffffff, #eff6ff);
+        background: rgba(255, 255, 255, 0.94);
         border: 1px solid rgba(148, 163, 184, 0.18);
         border-radius: 18px;
         padding: 1rem 1rem 0.8rem;
-        box-shadow: 0 18px 55px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     }
     div[data-testid="stMetric"] span[data-testid="stMetricLabel"] {
         color: #475569;
@@ -239,43 +249,72 @@ st.markdown(
         font-weight: 700;
     }
     section[data-testid="stExpander"] > div:first-child {
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(255, 255, 255, 0.92);
-        box-shadow: 0 18px 55px rgba(15, 23, 42, 0.08);
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
     }
     .stPlotlyChart,
     .stChart {
-        border-radius: 22px;
+        border-radius: 20px;
         overflow: hidden;
-        box-shadow: 0 24px 45px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
     }
     button,
     button:focus-visible,
     button:hover {
         border-radius: 999px !important;
-        background: linear-gradient(135deg, #6366f1 0%, #10b981 100%) !important;
+        background: #2563eb !important;
         color: #ffffff !important;
         border: none !important;
-        box-shadow: 0 10px 35px rgba(15, 23, 42, 0.14) !important;
+        box-shadow: 0 10px 25px rgba(37, 99, 235, 0.18) !important;
     }
     button:hover {
         transform: translateY(-1px);
     }
-    a, a:visited {
-        color: #2563eb;
+    a,
+    a:visited {
+        color: #1d4ed8;
     }
-    .hero-card {
-        background: linear-gradient(135deg, #e0f2fe, #eef2ff);
-        border: 1px solid rgba(99, 102, 241, 0.18);
-        border-radius: 20px;
-        padding: 1.2rem 1.4rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 18px 55px rgba(15, 23, 42, 0.08);
+    .hero-card,
+    .section-card {
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 22px;
+        padding: 1.4rem 1.6rem;
+        margin-bottom: 1.3rem;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+    }
+    .hero-card h1,
+    .section-card h2 {
+        margin-top: 0;
+        color: #0f172a;
+    }
+    .hero-card p,
+    .section-card p,
+    .section-card ul {
+        color: #475569;
+        line-height: 1.75;
+    }
+    .badge-custom {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #1d4ed8;
+        padding: 0.6rem 0.9rem;
+        font-weight: 600;
+        margin-top: 0.75rem;
     }
     @media (max-width: 768px) {
         [data-testid="stAppViewContainer"] {
             padding: 1rem;
+        }
+        .hero-card,
+        .section-card {
+            padding: 1.1rem 1.1rem;
         }
     }
     </style>
@@ -283,7 +322,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("DATA APPS")
+st.title("Collecte & Analyse")
 st.markdown("---")
 
 # === Chemins relatifs ===
@@ -292,14 +331,16 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "data_collection.db")
 
 # === Menu latéral ===
-menu = st.sidebar.selectbox(
-    "Navigation",
+st.sidebar.markdown("### Menu")
+menu = st.sidebar.radio(
+    "",
     [
-        "Accueil",
-        "Dashboard",
-        "Téléchargement données brutes",
-        "Formulaires d'évaluation",
+        "🏠 Accueil",
+        "📊 Dashboard",
+        "📥 Données brutes",
+        "📝 Formulaires",
     ],
+    index=0,
 )
 
 # === PAGE ACCUEIL ===
