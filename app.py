@@ -203,7 +203,7 @@ def build_cars_dashboard(df):
         df["marque_clean"] = (
             df[marque_col]
             .astype(str)
-            .str.replace(r"(?i)^détail\s*", "", regex=True)
+            .str.replace(r"(?i)^détails\s*", "", regex=True)
             .str.strip()
         )
         marque_col_clean = "marque_clean"
@@ -266,7 +266,7 @@ def build_cars_dashboard(df):
                 color_discrete_sequence=["#f59e0b"]
             )
             fig2 = apply_plotly_theme(fig2)
-            fig2.update_traces(texttemplate='%{text:.0f} £', textposition="outside")
+            fig2.update_traces(texttemplate='%{text:.0f} F cfa', textposition="outside")
             st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
         else:
             st.info("Colonne prix non trouvée pour le prix moyen.")
