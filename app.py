@@ -1,8 +1,18 @@
 import os
+import time
 import sqlite3
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
 
 # ---------------------------
 # Fonctions utilitaires
@@ -30,7 +40,6 @@ def apply_plotly_theme(fig):
 
 
 def metric_card(label, value, icon, color):
-    """Carte de métrique pour fond sombre."""
     return f"""
     <div class="metric-card">
         <div class="metric-label">
@@ -43,7 +52,6 @@ def metric_card(label, value, icon, color):
 
 
 def section_header(title, description, icon, color):
-    """En-tête de section pour fond sombre."""
     return f"""
     <div class="section-header" style="border-left-color: {color};">
         <h3>{icon} {title}</h3>
@@ -60,7 +68,6 @@ def section_header(title, description, icon, color):
 def load_table(db_path, table_name):
     if not os.path.exists(db_path):
         return pd.DataFrame()
-
     try:
         with sqlite3.connect(db_path) as conn:
             tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
@@ -72,12 +79,171 @@ def load_table(db_path, table_name):
 
 
 # ---------------------------
+# Configuration Selenium (Headless)
+# ---------------------------
+
+def create_driver():
+    """Crée un driver Chrome headless optimisé pour Streamlit"""
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    return driver
+
+
+# ---------------------------
+# SCRAPING Selenium - Books to Scrape
+# ---------------------------
+
+def scrape_books_selenium(start_url: str, max_pages: int = 3):
+    """Scrape multi-pages uniquement avec Selenium"""
+    driver = None
+    all_books = []
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    try:
+        driver = create_driver()
+        current_url = start_url
+        page = 1
+
+        while current_url and page <= max_pages:
+            status_text.info(f"📄 Page {page}/{max_pages} en cours de scraping (Selenium)...")
+            
+            driver.get(current_url)
+            time.sleep(1.5)  # laisser le temps de charger
+
+            # Attendre que les livres apparaissent
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "article.product_pod"))
+            )
+
+            books = driver.find_elements(By.CSS_SELECTOR, "article.product_pod")
+
+            for book in books:
+                try:
+                    title = book.find_element(By.CSS_SELECTOR, "h3 a").get_attribute("title")
+                except:
+                    title = "N/A"
+
+                try:
+                    price = book.find_element(By.CSS_SELECTOR, "p.price_color").text
+                except:
+                    price = "N/A"
+
+                try:
+                    rating_elem = book.find_element(By.CSS_SELECTOR, "p.star-rating")
+                    rating = rating_elem.get_attribute("class").split()[-1]
+                except:
+                    rating = "N/A"
+
+                try:
+                    availability = book.find_element(By.CSS_SELECTOR, "p.instock.availability").text.strip()
+                except:
+                    availability = "N/A"
+
+                try:
+                    link = book.find_element(By.CSS_SELECTOR, "h3 a").get_attribute("href")
+                except:
+                    link = ""
+
+                all_books.append({
+                    "Titre": title,
+                    "Prix": price,
+                    "Note": rating,
+                    "Disponibilité": availability,
+                    "Lien": link,
+                    "Page": page
+                })
+
+            # Pagination
+            try:
+                next_btn = driver.find_element(By.CSS_SELECTOR, "li.next a")
+                current_url = next_btn.get_attribute("href")
+                page += 1
+                progress_bar.progress(min(page / max_pages, 1.0))
+            except:
+                break  # plus de page suivante
+
+        progress_bar.progress(1.0)
+        status_text.success(f"✅ Scraping terminé avec Selenium — {len(all_books)} livres récupérés")
+
+    except Exception as e:
+        st.error(f"Erreur Selenium : {e}")
+    finally:
+        if driver:
+            driver.quit()
+
+    return pd.DataFrame(all_books)
+
+
+# ---------------------------
+# SCRAPING générique avec Selenium
+# ---------------------------
+
+def scrape_generic_selenium(url: str, max_items: int = 30):
+    """Scraper générique uniquement avec Selenium"""
+    driver = None
+    data = []
+
+    try:
+        driver = create_driver()
+        driver.get(url)
+        time.sleep(2)
+
+        # Extraire les liens
+        links = driver.find_elements(By.TAG_NAME, "a")[:max_items]
+
+        for link in links:
+            try:
+                text = link.text.strip()
+                href = link.get_attribute("href")
+                if text and len(text) > 4 and href:
+                    data.append({
+                        "Texte": text[:180],
+                        "Lien": href,
+                        "Source": url
+                    })
+            except:
+                continue
+
+        # Si peu de résultats, prendre aussi les titres
+        if len(data) < 5:
+            for tag in ["h1", "h2", "h3"]:
+                elements = driver.find_elements(By.TAG_NAME, tag)
+                for el in elements[:15]:
+                    text = el.text.strip()
+                    if text:
+                        data.append({
+                            "Texte": text[:180],
+                            "Lien": url,
+                            "Source": url
+                        })
+
+    except Exception as e:
+        st.error(f"Erreur Selenium : {e}")
+    finally:
+        if driver:
+            driver.quit()
+
+    return pd.DataFrame(data)
+
+
+# ---------------------------
 # Dashboard Livres
 # ---------------------------
 
 def build_books_dashboard(df):
     if df.empty:
-        st.warning("Aucune donnée de livres trouvée. Vérifie que la table **books** existe dans la base.")
+        st.warning("Aucune donnée de livres trouvée.")
         return
 
     st.markdown(
@@ -90,7 +256,6 @@ def build_books_dashboard(df):
         unsafe_allow_html=True
     )
 
-    # Nettoyage des prix
     price_col = resolve_column(df, ["V2_Prix", "prix", "price", "Prix"])
     if price_col:
         df = df.copy()
@@ -105,7 +270,6 @@ def build_books_dashboard(df):
     else:
         prix_clean = pd.Series(dtype="float64")
 
-    # Métriques
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(metric_card("Total", f"{len(df)}", "fas fa-book", "#60a5fa"), unsafe_allow_html=True)
@@ -156,10 +320,9 @@ def build_books_dashboard(df):
         else:
             st.info("Colonne des notes introuvable.")
 
-    # Disponibilité
     availability_col = resolve_column(df, ["V3_Disponibilite", "disponibilite", "availability", "Disponibilité"])
     if availability_col:
-        st.markdown("#### Disponibilité des livres ")
+        st.markdown("#### Disponibilité des livres")
         fig = px.pie(
             df,
             names=availability_col,
@@ -180,7 +343,7 @@ def build_books_dashboard(df):
 
 def build_cars_dashboard(df):
     if df.empty:
-        st.warning("Aucune donnée de voitures trouvée. Vérifie que la table **cars** existe dans la base.")
+        st.warning("Aucune donnée de voitures trouvée.")
         return
 
     st.markdown(
@@ -197,7 +360,6 @@ def build_cars_dashboard(df):
     region_col = resolve_column(df, ["region", "V7_Region", "Région", "location", "Region"])
     boite_col = resolve_column(df, ["data8", "boite", "V6_Boite", "Boite", "boîte", "transmission", "gearbox"])
 
-    # Nettoyage marque
     if marque_col:
         df = df.copy()
         df["marque_clean"] = (
@@ -210,7 +372,6 @@ def build_cars_dashboard(df):
     else:
         marque_col_clean = None
 
-    # Métriques
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(metric_card("Total", f"{len(df)}", "fas fa-car", "#60a5fa"), unsafe_allow_html=True)
@@ -226,26 +387,18 @@ def build_cars_dashboard(df):
     col_a, col_b = st.columns(2)
 
     with col_a:
-        # Top 10 des marques (barres horizontales)
         if marque_col_clean:
             top = df[marque_col_clean].value_counts().head(10).reset_index()
             top.columns = ["Marque", "Nombre"]
             fig1 = px.bar(
-                top,
-                x="Nombre",
-                y="Marque",
-                text="Nombre",
-                title="Top 10 des marques (nombre de voitures)",
-                orientation="h",
+                top, x="Nombre", y="Marque", text="Nombre",
+                title="Top 10 des marques", orientation="h",
                 color_discrete_sequence=["#0f766e"]
             )
             fig1 = apply_plotly_theme(fig1)
             fig1.update_traces(textposition="outside")
             st.plotly_chart(fig1, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("Colonne marque non trouvée.")
 
-        # Prix moyen par marque
         price_col = resolve_column(df, ["prix", "price", "V2_Prix", "Prix"])
         if price_col and marque_col_clean:
             df["prix_clean"] = pd.to_numeric(df[price_col], errors="coerce")
@@ -258,47 +411,34 @@ def build_cars_dashboard(df):
             )
             avg_price.columns = ["Marque", "Prix moyen"]
             fig2 = px.bar(
-                avg_price,
-                x="Marque",
-                y="Prix moyen",
-                text="Prix moyen",
-                title="Top 10 des marques par prix moyen",
+                avg_price, x="Marque", y="Prix moyen", text="Prix moyen",
+                title="Top 10 marques par prix moyen",
                 color_discrete_sequence=["#f59e0b"]
             )
             fig2 = apply_plotly_theme(fig2)
             fig2.update_traces(texttemplate='%{text:.0f} F cfa', textposition="outside")
             st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("Colonne prix non trouvée pour le prix moyen.")
 
     with col_b:
         if boite_col:
             fig = px.pie(
-                df,
-                names=boite_col,
-                title="Répartition des boîtes",
-                hole=0.45,
-                color_discrete_sequence=px.colors.qualitative.Safe
+                df, names=boite_col, title="Répartition des boîtes",
+                hole=0.45, color_discrete_sequence=px.colors.qualitative.Safe
             )
             fig = apply_plotly_theme(fig)
             fig.update_traces(textinfo="percent+label", textposition="inside")
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("Colonne boîte de vitesses non trouvée.")
 
     if region_col:
         st.markdown("#### Top 10 des régions")
         top = df[region_col].value_counts().head(10).reset_index()
         top.columns = ["Région", "Nombre"]
-        fig = px.bar(
-            top, x="Région", y="Nombre", text="Nombre",
-            color_discrete_sequence=["#f59e0b"]
-        )
+        fig = px.bar(top, x="Région", y="Nombre", text="Nombre", color_discrete_sequence=["#f59e0b"])
         fig = apply_plotly_theme(fig)
         fig.update_traces(textposition="outside")
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    with st.expander("Voir les données "):
+    with st.expander("Voir les données"):
         st.dataframe(df, use_container_width=True)
 
 
@@ -313,80 +453,30 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS pour un thème sombre cohérent
+# CSS (identique)
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
 <style>
-/* ========== FOND ========== */
-.stApp {
-    background-color: #0f172a !important;
-    font-family: 'Inter', system-ui, sans-serif;
-    color: #e2e8f0;
-}
-
-[data-testid="stAppViewContainer"] > .main {
-    background-color: #0f172a;
-}
-
-/* ========== SIDEBAR ========== */
-[data-testid="stSidebar"] {
-    background-color: #1e293b !important;
-}
-
-[data-testid="stSidebar"] * {
-    color: #e2e8f0 !important;
-}
-
+.stApp { background-color: #0f172a !important; font-family: 'Inter', system-ui, sans-serif; color: #e2e8f0; }
+[data-testid="stAppViewContainer"] > .main { background-color: #0f172a; }
+[data-testid="stSidebar"] { background-color: #1e293b !important; }
+[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
 [data-testid="stSidebar"] .stRadio label {
     background: rgba(255,255,255,0.05) !important;
     border: 1px solid rgba(148,163,184,0.15) !important;
     border-radius: 12px !important;
     padding: 0.85rem 1.1rem !important;
     margin-bottom: 0.4rem !important;
-    transition: all 0.2s ease;
 }
-
-[data-testid="stSidebar"] .stRadio label:hover {
-    background: rgba(255,255,255,0.12) !important;
-    transform: translateX(4px);
-}
-
-/* ========== CARTES MÉTRIQUES ========== */
 .metric-card {
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(148,163,184,0.15);
     border-radius: 14px;
     padding: 1.1rem 1.2rem;
-    backdrop-filter: blur(6px);
-    height: 100%;
 }
-
-.metric-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: #94a3b8;
-}
-
-.metric-label i {
-    font-size: 1rem;
-}
-
-.metric-value {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: #f1f5f9;
-    line-height: 1.2;
-}
-
-/* ========== EN-TÊTES ========== */
+.metric-label { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.72rem; font-weight: 600; color: #94a3b8; }
+.metric-value { font-size: 1.75rem; font-weight: 700; color: #f1f5f9; }
 .section-header {
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(148,163,184,0.12);
@@ -394,126 +484,23 @@ st.markdown("""
     border-radius: 12px;
     padding: 1.1rem 1.4rem;
     margin-bottom: 1.5rem;
-    backdrop-filter: blur(6px);
 }
-
-.section-header h3 {
-    margin: 0 0 0.25rem 0 !important;
-    color: #f1f5f9 !important;
-    font-size: 1.25rem !important;
-    font-weight: 700 !important;
-}
-
-.section-header p {
-    margin: 0 !important;
-    color: #94a3b8 !important;
-    font-size: 0.95rem !important;
-}
-
-/* ========== CARTES ACCUEIL ========== */
+.section-header h3 { margin: 0 0 0.25rem 0 !important; color: #f1f5f9 !important; font-size: 1.25rem !important; }
+.section-header p { margin: 0 !important; color: #94a3b8 !important; }
 .hero-card, .section-card {
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(148,163,184,0.12);
     border-radius: 16px;
     padding: 1.6rem 1.8rem;
     margin-bottom: 1.4rem;
-    backdrop-filter: blur(6px);
 }
-
-.hero-card h1 {
-    color: #f1f5f9 !important;
-    margin-top: 0 !important;
-}
-
-.section-card h2 {
-    color: #f1f5f9 !important;
-    margin-top: 0 !important;
-}
-
-.hero-card p, .section-card p, .section-card li {
-    color: #cbd5e1 !important;
-    line-height: 1.65;
-}
-
-.badge-custom {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    background: rgba(59, 130, 246, 0.2);
-    color: #93c5fd;
-    padding: 0.4rem 0.9rem;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 0.9rem;
-    margin-top: 0.8rem;
-}
-
-/* ========== GRAPHIQUES ========== */
-.stPlotlyChart {
-    background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(148,163,184,0.12);
-    border-radius: 14px;
-    padding: 0.5rem;
-}
-
-/* ========== EXPANDER ========== */
-.streamlit-expanderHeader {
-    background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(148,163,184,0.12) !important;
-    border-radius: 10px !important;
-    color: #f1f5f9 !important;
-    font-weight: 600 !important;
-}
-
-.streamlit-expanderContent {
-    background: rgba(255,255,255,0.02) !important;
-}
-
-/* ========== BOUTONS ========== */
 .stDownloadButton button, .stButton button {
     background: #2563eb !important;
     color: white !important;
-    border: none !important;
     border-radius: 999px !important;
     font-weight: 600 !important;
-    padding: 0.5rem 1.6rem !important;
 }
-
-.stDownloadButton button:hover, .stButton button:hover {
-    background: #1d4ed8 !important;
-}
-
-/* ========== TITRES ========== */
-h1, h2, h3 {
-    color: #f1f5f9 !important;
-}
-
-/* ========== ALERTES ========== */
-.stAlert {
-    background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(148,163,184,0.12) !important;
-    border-radius: 10px !important;
-    color: #e2e8f0 !important;
-}
-
-/* ========== DATAFRAME ========== */
-.dataframe {
-    background: rgba(255,255,255,0.04) !important;
-    border-radius: 10px;
-    border: 1px solid rgba(148,163,184,0.1);
-}
-.dataframe th {
-    background: rgba(99,102,241,0.15) !important;
-    color: #f1f5f9 !important;
-}
-.dataframe td {
-    color: #cbd5e1 !important;
-}
-
-/* ========== RADIO ========== */
-.stRadio label {
-    color: #e2e8f0 !important;
-}
+h1, h2, h3 { color: #f1f5f9 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -532,9 +519,10 @@ DB_PATH = os.path.join(DATA_DIR, "data_collection.db")
 st.sidebar.markdown("### Navigation")
 menu = st.sidebar.radio(
     "Aller à",
-    ["Accueil", "Dashboard", "Données brutes", "Formulaires"],
+    ["Accueil", "Scraping", "Dashboard", "Données brutes", "Formulaires"],
     format_func=lambda x: {
         "Accueil": "🏠  Accueil",
+        "Scraping": "🕸️  Scraping (Selenium)",
         "Dashboard": "📈  Dashboard",
         "Données brutes": "📥  Données brutes",
         "Formulaires": "📝  Formulaires",
@@ -550,35 +538,91 @@ if menu == "Accueil":
     st.markdown("""
     <div class="hero-card">
         <h1>Bienvenue 👋</h1>
-        <p>Cette application te permet d’explorer facilement les données collectées sur les livres et les voitures.</p>
-        <div class="badge-custom">
-            <i class="fas fa-check-circle"></i> Simple · Clair · Pratique
-        </div>
+        <p>Application de collecte et d'analyse de données (Scraping Selenium + Dashboard).</p>
     </div>
-
     <div class="section-card">
-        <h2>Ce que tu peux faire</h2>
+        <h2>Fonctionnalités</h2>
         <ul>
-            <li>Visualiser les tendances des livres et des voitures</li>
-            <li>Consulter les métriques principales rapidement</li>
-            <li>Télécharger les fichiers bruts</li>
-            <li>Donner ton avis via les formulaires</li>
+            <li>🕸️ Scraping multi-pages avec <strong>Selenium uniquement</strong></li>
+            <li>📈 Dashboard des données nettoyées</li>
+            <li>📥 Téléchargement des données brutes</li>
+            <li>📝 Formulaires d'évaluation</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
+
+
+elif menu == "Scraping":
+    st.header("🕸️ Scraping avec Selenium")
+    st.markdown("**Tout le scraping se fait exclusivement avec Selenium** (pas de BeautifulSoup).")
+
+    scrape_type = st.radio(
+        "Type de scraping",
+        ["Books to Scrape (recommandé)", "URL personnalisée"],
+        horizontal=True
+    )
+
+    if scrape_type.startswith("Books"):
+        st.info("Site d'entraînement idéal : [books.toscrape.com](https://books.toscrape.com)")
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            start_url = st.text_input(
+                "URL de départ",
+                value="https://books.toscrape.com/catalogue/page-1.html"
+            )
+        with col2:
+            max_pages = st.number_input("Nombre de pages", min_value=1, max_value=20, value=3)
+
+        if st.button("🚀 Lancer le scraping Selenium", type="primary"):
+            with st.spinner("Selenium en cours d'exécution..."):
+                df_scraped = scrape_books_selenium(start_url, max_pages)
+
+            if not df_scraped.empty:
+                st.success(f"**{len(df_scraped)} livres** récupérés avec Selenium")
+                st.dataframe(df_scraped, use_container_width=True)
+
+                csv = df_scraped.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "📥 Télécharger les données scrapées (CSV)",
+                    data=csv,
+                    file_name="books_selenium.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("Aucune donnée récupérée.")
+
+    else:
+        custom_url = st.text_input("Colle l'URL à scraper", placeholder="https://exemple.com")
+        max_items = st.slider("Nombre max d'éléments", 10, 100, 30)
+
+        if st.button("🚀 Lancer le scraping générique (Selenium)", type="primary"):
+            if not custom_url:
+                st.error("Merci d'entrer une URL.")
+            else:
+                with st.spinner("Selenium en cours..."):
+                    df_scraped = scrape_generic_selenium(custom_url, max_items)
+
+                if not df_scraped.empty:
+                    st.success(f"**{len(df_scraped)} éléments** récupérés")
+                    st.dataframe(df_scraped, use_container_width=True)
+
+                    csv = df_scraped.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "📥 Télécharger (CSV)",
+                        data=csv,
+                        file_name="scraping_selenium.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.warning("Aucune donnée exploitable trouvée.")
+
 
 elif menu == "Dashboard":
     st.header("Dashboard des données")
 
     if not os.path.exists(DB_PATH):
-        st.error(f"""
-        **Base de données introuvable**
-
-        Chemin attendu :  
-        `{DB_PATH}`
-
-        Vérifie que le fichier `data_collection.db` se trouve bien dans le dossier `data/`.
-        """)
+        st.error(f"Base de données introuvable : `{DB_PATH}`")
     else:
         choix = st.radio(
             "Quelle source veux-tu explorer ?",
@@ -593,9 +637,10 @@ elif menu == "Dashboard":
             df = load_table(DB_PATH, "cars")
             build_cars_dashboard(df)
 
+
 elif menu == "Données brutes":
     st.header("Téléchargement des données brutes")
-    st.write("Télécharge les fichiers CSV issus du scraping.")
+    st.write("Fichiers issus du scraping (Web Scraper / Selenium).")
 
     col1, col2 = st.columns(2)
 
@@ -603,12 +648,7 @@ elif menu == "Données brutes":
         path = os.path.join(DATA_DIR, "books_brut.csv")
         if os.path.exists(path):
             with open(path, "rb") as f:
-                st.download_button(
-                    "📚 Télécharger Books bruts",
-                    data=f,
-                    file_name="books_brut.csv",
-                    mime="text/csv"
-                )
+                st.download_button("📚 Books bruts", data=f, file_name="books_brut.csv", mime="text/csv")
         else:
             st.warning("Fichier `books_brut.csv` introuvable.")
 
@@ -616,28 +656,22 @@ elif menu == "Données brutes":
         path = os.path.join(DATA_DIR, "gaaraas_brut.csv")
         if os.path.exists(path):
             with open(path, "rb") as f:
-                st.download_button(
-                    "🚗 Télécharger Gaaraas bruts",
-                    data=f,
-                    file_name="gaaraas_brut.csv",
-                    mime="text/csv"
-                )
+                st.download_button("🚗 Gaaraas bruts", data=f, file_name="gaaraas_brut.csv", mime="text/csv")
         else:
             st.warning("Fichier `gaaraas_brut.csv` introuvable.")
 
+
 elif menu == "Formulaires":
     st.header("Ton avis compte")
-    st.write("Remplis l’un des formulaires ci-dessous pour m’aider à améliorer l’application.")
-
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("Formulaire Kobo")
-        st.link_button("Ouvrir le formulaire Kobo", "https://ee.kobotoolbox.org/x/wjF8NPvg")
+        st.link_button("Ouvrir Kobo", "https://ee.kobotoolbox.org/x/wjF8NPvg")
 
     with col2:
         st.subheader("Formulaire Google Forms")
         st.link_button(
-            "Ouvrir le formulaire Google",
+            "Ouvrir Google Forms",
             "https://docs.google.com/forms/d/e/1FAIpQLScK9rU2LxRYeGuR7Z6yW0aYgPIH7P3una4jg8G3pY3a8fccvw/viewform"
         )
