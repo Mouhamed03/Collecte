@@ -174,7 +174,7 @@ def scrape_books_selenium(start_url: str, max_pages: int = 3):
                 break  # plus de page suivante
 
         progress_bar.progress(1.0)
-        status_text.success(f"✅ Scraping terminé avec Selenium — {len(all_books)} livres récupérés")
+        status_text.success(f" Scraping terminé  — {len(all_books)} livres récupérés")
 
     except Exception as e:
         st.error(f"Erreur Selenium : {e}")
@@ -186,7 +186,7 @@ def scrape_books_selenium(start_url: str, max_pages: int = 3):
 
 
 # ---------------------------
-# SCRAPING générique avec Selenium
+# SCRAPING  avec Selenium
 # ---------------------------
 
 def scrape_generic_selenium(url: str, max_items: int = 30):
@@ -537,8 +537,8 @@ menu = st.sidebar.radio(
 if menu == "Accueil":
     st.markdown("""
     <div class="hero-card">
-        <h1>Bienvenue 👋</h1>
-        <p>Application de collecte et d'analyse de données (Scraping Selenium + Dashboard).</p>
+        <h1>Bienvenue - Welcome - Bienvenido</h1>
+        <p>Application de collecte et d'analyse de données issues de differentes methodes de recuperation de donnees.</p>
     </div>
     <div class="section-card">
         <h2>Fonctionnalités</h2>
