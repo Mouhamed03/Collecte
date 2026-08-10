@@ -640,7 +640,7 @@ elif menu == "Dashboard":
 
 elif menu == "Données brutes":
     st.header("Téléchargement des données brutes")
-    st.write("Fichiers issus du scraping (Web Scraper avecc  Selenium)")
+    st.write("Fichiers issus du scraping (no-code)")
 
     col1, col2 = st.columns(2)
 
