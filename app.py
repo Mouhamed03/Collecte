@@ -15,7 +15,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 # ---------------------------
-# Fonctions utilitaires
+#  utilitaires
 # ---------------------------
 
 def resolve_column(df, candidates):
@@ -79,11 +79,11 @@ def load_table(db_path, table_name):
 
 
 # ---------------------------
-# Configuration Selenium (Headless)
+# Configuration Headless(Selenium)
 # ---------------------------
 
 def create_driver():
-    """Crée un driver Chrome headless optimisé pour Streamlit"""
+    """ Chrome headless optimisé pour Streamlit"""
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -119,7 +119,7 @@ def scrape_books_selenium(start_url: str, max_pages: int = 3):
             status_text.info(f"📄 Page {page}/{max_pages} en cours de scraping (Selenium)...")
             
             driver.get(current_url)
-            time.sleep(1.5)  # laisser le temps de charger
+            time.sleep(1.5)  # lle temps de charger
 
             # Attendre que les livres apparaissent
             WebDriverWait(driver, 10).until(
@@ -333,7 +333,7 @@ def build_books_dashboard(df):
         fig.update_traces(textinfo="percent+label", textposition="inside")
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    with st.expander("Voir les données brutes"):
+    with st.expander("Voir les données "):
         st.dataframe(df, use_container_width=True)
 
 
@@ -448,7 +448,7 @@ def build_cars_dashboard(df):
 
 st.set_page_config(
     page_title="Collecte & Analyse",
-    page_icon="📊",
+    page_icon="⌗",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -543,10 +543,10 @@ if menu == "Accueil":
     <div class="section-card">
         <h2>Fonctionnalités</h2>
         <ul>
-            <li>🕸️ Scraping multi-pages avec <strong>Selenium uniquement</strong></li>
+            <li>🕸️ Scraping multi-pages </li>
             <li>📈 Dashboard des données nettoyées</li>
             <li>📥 Téléchargement des données brutes</li>
-            <li>📝 Formulaires d'évaluation</li>
+            <li>📝 Formulaires d'évaluation dde notre application</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
@@ -554,7 +554,7 @@ if menu == "Accueil":
 
 elif menu == "Scraping":
     st.header("🕸️ Scraping avec Selenium")
-    st.markdown("**Tout le scraping se fait exclusivement avec Selenium** (pas de BeautifulSoup).")
+    st.markdown("**Tout le scraping se fait exclusivement avec Selenium** .")
 
     scrape_type = st.radio(
         "Type de scraping",
@@ -574,7 +574,7 @@ elif menu == "Scraping":
         with col2:
             max_pages = st.number_input("Nombre de pages", min_value=1, max_value=20, value=3)
 
-        if st.button("🚀 Lancer le scraping Selenium", type="primary"):
+        if st.button(" Lancer le scraping Selenium", type="primary"):
             with st.spinner("Selenium en cours d'exécution..."):
                 df_scraped = scrape_books_selenium(start_url, max_pages)
 
@@ -584,7 +584,7 @@ elif menu == "Scraping":
 
                 csv = df_scraped.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "📥 Télécharger les données scrapées (CSV)",
+                    "📥 Télécharger les données brutes scrapées (CSV)",
                     data=csv,
                     file_name="books_selenium.csv",
                     mime="text/csv"
@@ -596,7 +596,7 @@ elif menu == "Scraping":
         custom_url = st.text_input("Colle l'URL à scraper", placeholder="https://exemple.com")
         max_items = st.slider("Nombre max d'éléments", 10, 100, 30)
 
-        if st.button("🚀 Lancer le scraping générique (Selenium)", type="primary"):
+        if st.button(" Lancer le scraping générique (Selenium)", type="primary"):
             if not custom_url:
                 st.error("Merci d'entrer une URL.")
             else:
@@ -640,7 +640,7 @@ elif menu == "Dashboard":
 
 elif menu == "Données brutes":
     st.header("Téléchargement des données brutes")
-    st.write("Fichiers issus du scraping (Web Scraper / Selenium).")
+    st.write("Fichiers issus du scraping (Web Scraper avecc  Selenium)")
 
     col1, col2 = st.columns(2)
 
@@ -666,12 +666,12 @@ elif menu == "Formulaires":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Formulaire Kobo")
+        st.subheader("Formulaire Kobotools 📋")
         st.link_button("Ouvrir Kobo", "https://ee.kobotoolbox.org/x/wjF8NPvg")
 
     with col2:
         st.subheader("Formulaire Google Forms")
         st.link_button(
-            "Ouvrir Google Forms",
+            "Ouvrir Google Forms 📋",
             "https://docs.google.com/forms/d/e/1FAIpQLScK9rU2LxRYeGuR7Z6yW0aYgPIH7P3una4jg8G3pY3a8fccvw/viewform"
         )
