@@ -83,10 +83,10 @@ def load_table(db_path, table_name):
 # ---------------------------
 
 def create_driver():
-    """Chrome headless optimisé pour Streamlit Cloud"""
+    """Chrome headless optimisé pour Streamlit Cloud + version compatible"""
     options = Options()
-    
-    # Options essentielles pour Streamlit Cloud
+
+    # Options essentielles
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -95,33 +95,46 @@ def create_driver():
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--single-process")          # important sur Streamlit Cloud
+    options.add_argument("--single-process")
     options.add_argument("--disable-extensions")
-    options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
 
-    # Chemin possible de Chrome/Chromium sur Streamlit Cloud
+    # Chemins possibles de Chromium
     chrome_paths = [
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
         "/usr/bin/google-chrome",
         "/usr/bin/google-chrome-stable"
     ]
-    
+
     for path in chrome_paths:
         if os.path.exists(path):
             options.binary_location = path
             break
 
     try:
-        service = Service(ChromeDriverManager().install())
+        # Force webdriver-manager à utiliser la version qui correspond au navigateur
+        from webdriver_manager.chrome import ChromeDriverManager
+        from webdriver_manager.core.os_manager import ChromeType
+
+        service = Service(
+            ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()
+        )
         driver = webdriver.Chrome(service=service, options=options)
         return driver
-    except Exception as e:
-        # Fallback : essayer sans webdriver-manager
-        st.warning(f"webdriver-manager a échoué, tentative alternative... ({e})")
-        driver = webdriver.Chrome(options=options)
-        return driver
 
+    except Exception as e:
+        st.warning(f"webdriver-manager a échoué : {e}")
+        # Dernier recours : laisser Selenium trouver le driver tout seul
+        try:
+            driver = webdriver.Chrome(options=options)
+            return driver
+        except Exception as e2:
+            st.error(f"Impossible de démarrer Chrome/Chromium : {e2}")
+            return None
 
 # ---------------------------
 # SCRAPING Selenium - Books to Scrape
