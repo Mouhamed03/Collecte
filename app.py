@@ -670,20 +670,32 @@ elif menu == "Données brutes":
     col1, col2 = st.columns(2)
 
     with col1:
-        path = os.path.join(DATA_DIR, "books_brut.csv")
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                st.download_button("📚 Books bruts", data=f, file_name="books_brut.csv", mime="text/csv")
-        else:
-            st.warning("Fichier `books_brut.csv` introuvable.")
+    path = os.path.join(DATA_DIR, "books_brut.csv")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            data = f.read()          
+        st.download_button(
+            "📚 Books bruts",
+            data=data,               
+            file_name="books_brut.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("Fichier `books_brut.csv` introuvable.")
 
-    with col2:
-        path = os.path.join(DATA_DIR, "gaaraas_brut.csv")
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                st.download_button("🚗 Gaaraas bruts", data=f, file_name="gaaraas_brut.csv", mime="text/csv")
-        else:
-            st.warning("Fichier `gaaraas_brut.csv` introuvable.")
+with col2:
+    path = os.path.join(DATA_DIR, "gaaraas_brut.csv")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            data = f.read()
+        st.download_button(
+            "🚗 Gaaraas bruts",
+            data=data,
+            file_name="gaaraas_brut.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("Fichier `gaaraas_brut.csv` introuvable.")
 
 
 elif menu == "Formulaires":
